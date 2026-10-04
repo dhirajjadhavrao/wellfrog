@@ -10,5 +10,7 @@ import java.util.List;
 public interface ActivityRepository extends JpaRepository<Activity, Long> {
     List<Activity> findByUserId(Long userId);
     List<Activity> findByUserIdAndParentIdIsNull(Long userId);
+    List<Activity> findByUserIdAndParentIdIsNullAndActiveTrue(Long userId);
+    List<Activity> findByUserIdAndActiveTrue(Long userId);
     List<Activity> findByUserIdAndParentId(Long userId, Long parentId);
 }

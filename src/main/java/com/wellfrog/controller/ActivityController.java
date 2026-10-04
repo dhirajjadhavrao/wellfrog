@@ -14,14 +14,21 @@ import java.util.Map;
 public class ActivityController {
 
     private final ActivityRepository activityRepository;
+    private final com.wellfrog.service.UserService userService;
+    private final com.wellfrog.repository.ActivityLogRepository activityLogRepository;
 
-    public ActivityController(ActivityRepository activityRepository) {
+    public ActivityController(ActivityRepository activityRepository,
+                              com.wellfrog.service.UserService userService,
+                              com.wellfrog.repository.ActivityLogRepository activityLogRepository) {
         this.activityRepository = activityRepository;
+        this.userService = userService;
+        this.activityLogRepository = activityLogRepository;
     }
 
     @GetMapping
     public ResponseEntity<List<Activity>> getAllActivities(Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
+        userService.ensureDefaultActivitiesForUser(userId);
         return ResponseEntity.ok(activityRepository.findByUserId(userId));
     }
 
@@ -30,7 +37,7 @@ public class ActivityController {
         Long userId = (Long) authentication.getPrincipal();
         activity.setUserId(userId);
         if (activity.getCategoryType() == null || activity.getCategoryType().isBlank()) {
-            activity.setCategoryType("CUSTOM");
+            activity.setCategoryType(activity.getParentId() != null ? "SUB_ACTIVITY" : "CUSTOM");
         }
         if (activity.getUnit() == null || activity.getUnit().isBlank()) {
             activity.setUnit("MINUTES");
@@ -38,19 +45,69 @@ public class ActivityController {
         if (activity.getColor() == null || activity.getColor().isBlank()) {
             activity.setColor("#386641");
         }
+        activity.setActive(true);
         return ResponseEntity.ok(activityRepository.save(activity));
     }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteActivity(Authentication authentication, @PathVariable Long id) {
+    @PutMapping("/{id}/toggle-active")
+    public ResponseEntity<?> toggleActivityActive(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, Boolean> body) {
         Long userId = (Long) authentication.getPrincipal();
         Activity activity = activityRepository.findById(id).orElse(null);
         if (activity != null && activity.getUserId().equals(userId)) {
-            // Delete sub-activities if this is a parent activity
-            List<Activity> subActivities = activityRepository.findByUserIdAndParentId(userId, id);
-            activityRepository.deleteAll(subActivities);
-            activityRepository.delete(activity);
-            return ResponseEntity.ok(Map.of("message", "Activity and sub-activities deleted"));
+            boolean newActive = (body != null && body.containsKey("active"))
+                    ? body.get("active")
+                    : !(activity.getActive() != null ? activity.getActive() : true);
+            activity.setActive(newActive);
+            activityRepository.save(activity);
+
+            // Also synchronize child sub-activities with root status
+            if (activity.getParentId() == null) {
+                List<Activity> subActivities = activityRepository.findByUserIdAndParentId(userId, id);
+                for (Activity sub : subActivities) {
+                    sub.setActive(newActive);
+                }
+                activityRepository.saveAll(subActivities);
+            }
+
+            return ResponseEntity.ok(activity);
+        }
+        return ResponseEntity.status(404).body(Map.of("error", "Activity not found"));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteOrDeactivateActivity(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestParam(required = false, defaultValue = "false") boolean permanent) {
+        Long userId = (Long) authentication.getPrincipal();
+        Activity activity = activityRepository.findById(id).orElse(null);
+        if (activity != null && activity.getUserId().equals(userId)) {
+            if (permanent) {
+                // Permanently delete custom activity, sub-activities and custom activity logs
+                List<Activity> subActivities = activityRepository.findByUserIdAndParentId(userId, id);
+                for (Activity sub : subActivities) {
+                    activityLogRepository.deleteByUserIdAndActivityId(userId, sub.getId());
+                }
+                activityRepository.deleteAll(subActivities);
+                activityLogRepository.deleteByUserIdAndActivityId(userId, id);
+                activityRepository.delete(activity);
+                return ResponseEntity.ok(Map.of("message", "Activity permanently deleted", "active", false));
+            } else {
+                // Soft deactivate: hide from dashboard, preserve all data!
+                activity.setActive(false);
+                activityRepository.save(activity);
+                if (activity.getParentId() == null) {
+                    List<Activity> subActivities = activityRepository.findByUserIdAndParentId(userId, id);
+                    for (Activity sub : subActivities) {
+                        sub.setActive(false);
+                    }
+                    activityRepository.saveAll(subActivities);
+                }
+                return ResponseEntity.ok(Map.of("message", "Activity deactivated and hidden from dashboard", "active", false));
+            }
         }
         return ResponseEntity.status(404).body(Map.of("error", "Activity not found"));
     }

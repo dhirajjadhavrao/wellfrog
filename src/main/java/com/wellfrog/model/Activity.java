@@ -27,6 +27,9 @@ public class Activity {
     private String color;
     private String icon;
 
+    @Column(nullable = false)
+    private Boolean active = true;
+
     public Activity() {}
 
     public Activity(Long userId, Long parentId, String name, String categoryType, String unit, String color, String icon) {
@@ -37,6 +40,7 @@ public class Activity {
         this.unit = unit;
         this.color = color;
         this.icon = icon;
+        this.active = true;
     }
 
     public Long getId() { return id; }
@@ -62,4 +66,7 @@ public class Activity {
 
     public String getIcon() { return icon; }
     public void setIcon(String icon) { this.icon = icon; }
+
+    public Boolean getActive() { return active != null ? active : true; }
+    public void setActive(Boolean active) { this.active = active; }
 }

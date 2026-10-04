@@ -21,19 +21,25 @@ public class DashboardController {
     private final WorkSessionRepository workSessionRepository;
     private final JobApplicationRepository jobApplicationRepository;
     private final ActivityRepository activityRepository;
+    private final ActivityLogRepository activityLogRepository;
+    private final com.wellfrog.service.UserService userService;
 
     public DashboardController(ExpenseRepository expenseRepository,
                                LoanRepository loanRepository,
                                WorkoutRepository workoutRepository,
                                WorkSessionRepository workSessionRepository,
                                JobApplicationRepository jobApplicationRepository,
-                               ActivityRepository activityRepository) {
+                               ActivityRepository activityRepository,
+                               ActivityLogRepository activityLogRepository,
+                               com.wellfrog.service.UserService userService) {
         this.expenseRepository = expenseRepository;
         this.loanRepository = loanRepository;
         this.workoutRepository = workoutRepository;
         this.workSessionRepository = workSessionRepository;
         this.jobApplicationRepository = jobApplicationRepository;
         this.activityRepository = activityRepository;
+        this.activityLogRepository = activityLogRepository;
+        this.userService = userService;
     }
 
     @GetMapping("/daily")
@@ -42,6 +48,7 @@ public class DashboardController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         
         Long userId = (Long) authentication.getPrincipal();
+        userService.ensureDefaultActivitiesForUser(userId);
         LocalDate targetDate = (date != null) ? date : LocalDate.now();
 
         // 1. Finance - Today's Expenses
@@ -86,8 +93,17 @@ public class DashboardController {
         long interviewCount = jobs.stream().filter(j -> "TECH_INTERVIEW".equalsIgnoreCase(j.getStatus()) || "HR_CALL".equalsIgnoreCase(j.getStatus())).count();
         long offerCount = jobs.stream().filter(j -> "OFFER".equalsIgnoreCase(j.getStatus())).count();
 
-        // 6. Root Activities
-        List<Activity> rootActivities = activityRepository.findByUserIdAndParentIdIsNull(userId);
+        // 6. Root & Sub Activities
+        List<Activity> allUserActivities = activityRepository.findByUserId(userId);
+        List<Activity> rootActivities = allUserActivities.stream()
+                .filter(a -> a.getParentId() == null)
+                .toList();
+        List<Activity> subActivities = allUserActivities.stream()
+                .filter(a -> a.getParentId() != null)
+                .toList();
+
+        // 7. Activity Logs for custom activities on targetDate
+        List<ActivityLog> dailyLogs = activityLogRepository.findByUserIdAndLogDate(userId, targetDate);
 
         Map<String, Object> response = new HashMap<>();
         response.put("date", targetDate);
@@ -128,6 +144,8 @@ public class DashboardController {
         ));
 
         response.put("activities", rootActivities);
+        response.put("subActivities", subActivities);
+        response.put("activityLogs", dailyLogs);
 
         return ResponseEntity.ok(response);
     }
