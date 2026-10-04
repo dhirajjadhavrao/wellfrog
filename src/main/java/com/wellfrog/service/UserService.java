@@ -91,6 +91,13 @@ public class UserService {
         activityRepository.save(new Activity(userId, workTime.getId(), "Meetings & Calls", "WORK_TIME", "MINUTES", "#AB47BC", "Users"));
         activityRepository.save(new Activity(userId, workTime.getId(), "Admin & Emails", "WORK_TIME", "MINUTES", "#BA68C8", "Mail"));
 
+        // 5. Naukri / Career Activity & Sub-activities
+        Activity career = activityRepository.save(new Activity(userId, null, "Naukri & Career", "CAREER", "COUNT", "#0D47A1", "Target"));
+        activityRepository.save(new Activity(userId, career.getId(), "Job Applications", "CAREER", "COUNT", "#1976D2", "Send"));
+        activityRepository.save(new Activity(userId, career.getId(), "Recruiter / HR Calls", "CAREER", "COUNT", "#2196F3", "PhoneCall"));
+        activityRepository.save(new Activity(userId, career.getId(), "Tech Interviews", "CAREER", "COUNT", "#42A5F5", "Code2"));
+        activityRepository.save(new Activity(userId, career.getId(), "Offers & Negotiation", "CAREER", "COUNT", "#64B5F6", "Trophy"));
+
         // Seed Sample Loan / EMI for demonstration
         loanRepository.save(new Loan(userId, "Personal / Vehicle Loan", new BigDecimal("15000.00"), 10, "PENDING", "Monthly auto-debit on 10th"));
 
