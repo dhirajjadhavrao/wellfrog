@@ -69,15 +69,33 @@ public class DashboardController {
         // 2. Finance - Loans & EMIs Summary
         List<Loan> allLoans = loanRepository.findByUserIdOrderByDueDayAsc(userId);
         BigDecimal totalEmi = BigDecimal.ZERO;
+        BigDecimal totalOutstanding = BigDecimal.ZERO;
         int paidCount = 0;
         int failedCount = 0;
         int pendingCount = 0;
+        int nearDueCount = 0;
+        int closedCount = 0;
+        int currentDay = targetDate.getDayOfMonth();
 
         for (Loan l : allLoans) {
-            totalEmi = totalEmi.add(l.getEmiAmount());
-            if ("PAID".equalsIgnoreCase(l.getStatus())) paidCount++;
-            else if ("FAILED".equalsIgnoreCase(l.getStatus())) failedCount++;
-            else pendingCount++;
+            if ("CLOSED".equalsIgnoreCase(l.getStatus())) {
+                closedCount++;
+                continue;
+            }
+            totalEmi = totalEmi.add(l.getEmiAmount() != null ? l.getEmiAmount() : BigDecimal.ZERO);
+            totalOutstanding = totalOutstanding.add(l.getRemainingAmount() != null ? l.getRemainingAmount() : BigDecimal.ZERO);
+
+            if ("PAID".equalsIgnoreCase(l.getStatus())) {
+                paidCount++;
+            } else if ("FAILED".equalsIgnoreCase(l.getStatus())) {
+                failedCount++;
+            } else {
+                pendingCount++;
+                int diff = (l.getDueDay() != null ? l.getDueDay() : 5) - currentDay;
+                if (diff >= 0 && diff <= 3) {
+                    nearDueCount++;
+                }
+            }
         }
 
         // 3. Workouts
@@ -115,13 +133,16 @@ public class DashboardController {
                 "expenses", dailyExpenses
         ));
 
-        response.put("loans", Map.of(
-                "totalEmiLiability", totalEmi,
-                "paidCount", paidCount,
-                "failedCount", failedCount,
-                "pendingCount", pendingCount,
-                "loanList", allLoans
-        ));
+        Map<String, Object> loansMap = new HashMap<>();
+        loansMap.put("totalEmiLiability", totalEmi);
+        loansMap.put("totalOutstanding", totalOutstanding);
+        loansMap.put("paidCount", paidCount);
+        loansMap.put("failedCount", failedCount);
+        loansMap.put("pendingCount", pendingCount);
+        loansMap.put("nearDueCount", nearDueCount);
+        loansMap.put("closedCount", closedCount);
+        loansMap.put("loanList", allLoans);
+        response.put("loans", loansMap);
 
         response.put("workouts", Map.of(
                 "completed", !dailyWorkouts.isEmpty(),
