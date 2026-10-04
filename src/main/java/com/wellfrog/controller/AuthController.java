@@ -62,6 +62,43 @@ public class AuthController {
     }
 
     /**
+     * Get public authentication configuration (Google Client ID if configured)
+     */
+    @GetMapping("/config")
+    public ResponseEntity<?> getAuthConfig() {
+        return ResponseEntity.ok(Map.of(
+                "googleClientId", googleClientId != null ? googleClientId : ""
+        ));
+    }
+
+    /**
+     * Email / Direct Auth for Sign In and Sign Up (creates user if new)
+     */
+    @PostMapping("/email-auth")
+    public ResponseEntity<?> emailAuth(@RequestBody Map<String, Object> payload) {
+        String email = (String) payload.get("email");
+        String name = (String) payload.get("name");
+        Boolean isSignUp = (Boolean) payload.getOrDefault("isSignUp", false);
+
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Email is required"));
+        }
+        email = email.trim().toLowerCase();
+
+        if (name == null || name.isBlank()) {
+            name = email.split("@")[0];
+            // Capitalize first letter
+            name = name.substring(0, 1).toUpperCase() + name.substring(1);
+        }
+
+        String picture = "https://api.dicebear.com/7.x/bottts/svg?seed=" + email;
+        String googleId = "user-" + Math.abs(email.hashCode());
+
+        Map<String, Object> authResponse = userService.processUserLogin(email, name.trim(), picture, googleId);
+        return ResponseEntity.ok(authResponse);
+    }
+
+    /**
      * 1-Click Fast Login for local development & demonstration
      */
     @PostMapping("/dev-login")
@@ -69,7 +106,7 @@ public class AuthController {
         String email = (payload != null && payload.get("email") != null) ? payload.get("email") : "dhiraj.dev@wellfrog.com";
         String name = (payload != null && payload.get("name") != null) ? payload.get("name") : "Dhiraj Jadhavrao";
         String picture = "https://api.dicebear.com/7.x/bottts/svg?seed=wellfrog";
-        String googleId = "dev-google-id-" + email.hashCode();
+        String googleId = "dev-google-id-" + Math.abs(email.hashCode());
 
         Map<String, Object> authResponse = userService.processUserLogin(email, name, picture, googleId);
         return ResponseEntity.ok(authResponse);
